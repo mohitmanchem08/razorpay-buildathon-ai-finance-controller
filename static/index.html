@@ -1,0 +1,1598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Razorpay AI Finance Controller</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --navy: #012652;
+    --blue: #0D94FB;
+    --bg: #F7F9FC;
+    --emerald: #0F9D6C;
+    --amber: #D97706;
+    --text: #1A1F2E;
+    --text-muted: #5B6472;
+    --border: #E2E8F0;
+    --card-bg: #FFFFFF;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    min-height: 100vh;
+  }
+
+  .mono { font-family: 'IBM Plex Mono', monospace; font-feature-settings: 'zero' 1; }
+
+  /* Applies the slashed-zero fix to every element using IBM Plex Mono,
+     regardless of which specific rule set the font-family -- prevents the
+     O/0 ambiguity bug (confirmed via API: real data is 'O158' not '0158',
+     it just rendered ambiguously) from recurring in any future addition. */
+  [style*="IBM Plex Mono"], .data-table td.mono-cell, .exception-order-id,
+  .exception-amount, .exception-action-tag, .exception-detail-grid .val,
+  .confidence-label, .ai-model-note code, .shortlist-order, .shortlist-amount {
+    font-feature-settings: 'zero' 1;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: 280px;
+    background: var(--navy);
+    color: white;
+    padding: 24px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    flex-shrink: 0;
+  }
+
+  .sidebar h1 {
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .sidebar .subtitle {
+    font-size: 12px;
+    color: #93A9C4;
+    margin-top: 4px;
+  }
+
+  .sidebar-section {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 8px;
+    padding: 16px;
+  }
+
+  .sidebar-section h3 {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #93A9C4;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  .file-input-label {
+    display: block;
+    font-size: 13px;
+    color: #C5D3E5;
+    margin-bottom: 6px;
+  }
+
+  input[type="file"] {
+    width: 100%;
+    font-size: 12px;
+    color: #C5D3E5;
+    margin-bottom: 12px;
+  }
+
+  .btn {
+    width: 100%;
+    padding: 9px 12px;
+    border-radius: 6px;
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s ease;
+  }
+
+  .btn:hover { opacity: 0.85; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-primary { background: var(--blue); color: white; }
+  .btn-secondary { background: rgba(255,255,255,0.1); color: white; margin-top: 8px; }
+
+  .usage-stat {
+    display: flex;
+    justify-content: space-between;
+    font-size: 12px;
+    color: #C5D3E5;
+    padding: 4px 0;
+  }
+
+  .usage-stat .val { font-family: 'IBM Plex Mono', monospace; color: white; }
+
+  .status-pill {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+  }
+
+  .status-pill.sample { background: rgba(255,255,255,0.1); color: #C5D3E5; }
+  .status-pill.custom { background: rgba(15,157,108,0.2); color: #4ADE94; }
+
+  /* ── Main area ── */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .topbar {
+    background: white;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    height: 60px;
+  }
+
+  .tab-btn {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 18px 20px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s ease;
+  }
+
+  .tab-btn:hover { color: var(--text); }
+
+  .tab-btn.active {
+    color: var(--navy);
+    border-bottom-color: var(--blue);
+  }
+
+  .content {
+    flex: 1;
+    padding: 32px;
+    overflow-y: auto;
+  }
+
+  .section { display: none; }
+  .section.active { display: block; }
+
+  .placeholder {
+    color: var(--text-muted);
+    font-size: 14px;
+    padding: 40px;
+    text-align: center;
+    background: white;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+  }
+
+  /* ── Loading skeletons ── */
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #EEF1F5 25%, #E2E8F0 37%, #EEF1F5 63%);
+    background-size: 400% 100%;
+    animation: shimmer 1.4s ease infinite;
+    border-radius: 6px;
+  }
+
+  .skeleton-metric-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .skeleton-line {
+    height: 12px;
+    margin-bottom: 8px;
+  }
+
+  .skeleton-line.short { width: 50%; }
+  .skeleton-line.tall { height: 28px; width: 70%; margin-top: 4px; }
+
+  .skeleton-row {
+    height: 16px;
+    margin: 12px 14px;
+  }
+
+  .skeleton-chart {
+    height: 240px;
+    border-radius: 6px;
+  }
+
+  #skeleton-overlay.loaded { display: none; }
+  .loading-hidden { display: none !important; }
+
+  /* ── Error banner ── */
+  #error-banner-container {
+    position: relative;
+    z-index: 100;
+  }
+
+  .error-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #FEF2F2;
+    border-bottom: 1px solid #FECACA;
+    color: #991B1B;
+    padding: 10px 32px;
+    font-size: 13px;
+    animation: bannerSlideIn 0.2s ease;
+  }
+
+  @keyframes bannerSlideIn {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+  }
+
+  .error-banner .msg { flex: 1; }
+
+  .error-banner .dismiss {
+    background: none;
+    border: none;
+    color: #991B1B;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0 4px;
+    opacity: 0.6;
+  }
+
+  .error-banner .dismiss:hover { opacity: 1; }
+
+  /* ── Metric cards ── */
+  .metric-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+
+  .metric-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .metric-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 500;
+    margin-bottom: 8px;
+  }
+
+  .metric-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--navy);
+  }
+
+  .metric-delta {
+    font-size: 12px;
+    margin-top: 6px;
+    font-weight: 500;
+  }
+
+  .metric-delta.good { color: var(--emerald); }
+  .metric-delta.warn { color: var(--amber); }
+
+  /* ── Charts ── */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1.4fr;
+    gap: 16px;
+  }
+
+  .chart-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+  }
+
+  .chart-card h3 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 16px;
+  }
+
+  .chart-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+  }
+
+  .chart-header-row h3 { margin-bottom: 0; }
+
+  .chart-toggle {
+    display: flex;
+    gap: 2px;
+    background: #F1F5F9;
+    border-radius: 6px;
+    padding: 2px;
+  }
+
+  .toggle-btn {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .toggle-btn.active {
+    background: white;
+    color: var(--navy);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+  }
+
+  .chart-wrap {
+    height: 240px;
+    position: relative;
+  }
+
+  /* ── Sub-tabs (within Reconciliation section) ── */
+  .subtab-bar {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .subtab-btn {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 10px 16px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+  }
+
+  .subtab-btn.active {
+    color: var(--navy);
+    border-bottom-color: var(--blue);
+  }
+
+  .subtab-panel { display: none; }
+  .subtab-panel.active { display: block; }
+
+  /* ── Tables ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 13px;
+  }
+
+  .data-table th {
+    background: #F1F5F9;
+    text-align: left;
+    padding: 10px 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .data-table th[data-sort] {
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .data-table th[data-sort]:hover {
+    color: var(--navy);
+  }
+
+  .data-table th[data-sort].sort-active {
+    color: var(--blue);
+  }
+
+  .data-table th[data-sort]::after {
+    content: '⇅';
+    margin-left: 4px;
+    opacity: 0.4;
+    font-size: 10px;
+  }
+
+  .data-table th[data-sort].sort-active.sort-asc::after {
+    content: '↑';
+    opacity: 1;
+  }
+
+  .data-table th[data-sort].sort-active.sort-desc::after {
+    content: '↓';
+    opacity: 1;
+  }
+
+  .copy-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 11px;
+    padding: 0 2px;
+    opacity: 0.6;
+    vertical-align: middle;
+  }
+
+  .copy-btn:hover { opacity: 1; }
+  .copy-btn.copied { opacity: 1; }
+
+  .table-search {
+    width: 100%;
+    max-width: 320px;
+    margin-bottom: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+
+  .sort-select {
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: white;
+  }
+
+  .data-table td {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+  }
+
+  .data-table td.mono-cell { font-family: 'IBM Plex Mono', monospace; }
+
+  .text-muted { color: var(--text-muted); font-size: 13px; }
+
+  /* ── AI batch bar ── */
+  .ai-batch-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+
+  .btn-inline { width: auto; padding: 8px 16px; }
+
+  /* ── Review dashboard ── */
+  .review-dashboard {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    margin-bottom: 16px;
+  }
+
+  .review-stat { display: flex; flex-direction: column; }
+  .review-stat-label { font-size: 11px; color: var(--text-muted); }
+  .review-stat-val { font-size: 18px; font-weight: 600; color: var(--navy); }
+
+  .review-filter { display: flex; gap: 4px; margin-left: auto; }
+
+  .filter-btn {
+    background: #F1F5F9;
+    border: none;
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .filter-btn.active { background: var(--blue); color: white; }
+
+  /* ── Exception cards ── */
+  .exception-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+  }
+
+  .exception-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    cursor: pointer;
+  }
+
+  .status-badge {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  .status-badge.pending { background: #FEF3C7; color: #92400E; }
+  .status-badge.reviewed { background: #D1FAE5; color: #065F46; }
+
+  .exception-order-id { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+  .exception-amount { font-family: 'IBM Plex Mono', monospace; color: var(--text-muted); }
+  .exception-action-tag {
+    font-size: 10px;
+    font-family: 'IBM Plex Mono', monospace;
+    background: #F1F5F9;
+    color: var(--text-muted);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-left: auto;
+  }
+
+  .exception-body {
+    display: none;
+    padding: 0 16px 16px 16px;
+    border-top: 1px solid var(--border);
+  }
+
+  .exception-card.expanded .exception-body { display: block; }
+
+  .exception-detail-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 16px;
+    font-size: 13px;
+    margin: 12px 0;
+  }
+
+  .exception-detail-grid .label { color: var(--text-muted); }
+  .exception-detail-grid .val { font-family: 'IBM Plex Mono', monospace; }
+
+  .rule-note {
+    font-size: 13px;
+    background: #F8FAFC;
+    border-left: 3px solid var(--blue);
+    padding: 8px 12px;
+    margin: 10px 0;
+    border-radius: 0 4px 4px 0;
+  }
+
+  .ai-analysis-box {
+    background: #EFF6FF;
+    border: 1px solid #BFDBFE;
+    border-radius: 6px;
+    padding: 12px;
+    margin: 10px 0;
+  }
+
+  .ai-category-tag {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    background: var(--navy);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 8px;
+  }
+
+  /* Confidence bar — signature element */
+  .confidence-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .confidence-track {
+    flex: 1;
+    height: 6px;
+    background: #DBEAFE;
+    border-radius: 3px;
+    overflow: hidden;
+  }
+
+  .confidence-fill {
+    height: 100%;
+    background: var(--blue);
+    border-radius: 3px;
+    transition: width 0.4s ease;
+  }
+
+  .confidence-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 32px;
+  }
+
+  .ai-rationale { font-size: 13px; }
+  .ai-model-note { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+  .review-checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    font-size: 13px;
+  }
+
+  /* ── Insights section ── */
+  .insight-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+
+  .insight-card h3 { font-size: 14px; margin-bottom: 10px; }
+
+  .story-text {
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--text);
+  }
+
+  .shortlist-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+
+  .shortlist-item:last-child { border-bottom: none; }
+
+  .shortlist-order { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+  .shortlist-amount { font-family: 'IBM Plex Mono', monospace; color: var(--amber); font-weight: 600; }
+  .shortlist-reason { color: var(--text-muted); font-size: 11px; margin-top: 2px; }
+
+  /* ── Chat ── */
+  .chat-card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-top: 16px;
+  }
+
+  .chat-card h3 { font-size: 14px; margin-bottom: 4px; }
+
+  .chat-suggestions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .suggestion-btn {
+    background: #F1F5F9;
+    border: 1px solid var(--border);
+    font-family: inherit;
+    font-size: 12px;
+    padding: 6px 12px;
+    border-radius: 16px;
+    cursor: pointer;
+    color: var(--text);
+  }
+
+  .suggestion-btn:hover { background: #E2E8F0; }
+
+  .chat-history {
+    max-height: 280px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+  }
+
+  .chat-msg {
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    font-size: 13px;
+    max-width: 85%;
+  }
+
+  .chat-msg.user {
+    background: var(--blue);
+    color: white;
+    margin-left: auto;
+  }
+
+  .chat-msg.assistant {
+    background: #F1F5F9;
+    color: var(--text);
+  }
+
+  .chat-input-row {
+    display: flex;
+    gap: 8px;
+  }
+
+  .chat-input-row input {
+    flex: 1;
+    padding: 9px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-family: inherit;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+
+  <aside class="sidebar">
+    <div>
+      <h1>💳 AI Finance Controller</h1>
+      <div class="subtitle">Track 4 · Razorpay AI Buildathon 2026</div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Data Source</h3>
+      <span class="status-pill sample" id="data-status-pill">Using sample data</span>
+      <div style="margin-top: 12px;">
+        <label class="file-input-label">Orders CSV</label>
+        <input type="file" id="orders-file" accept=".csv">
+        <label class="file-input-label">Settlements CSV</label>
+        <input type="file" id="settlements-file" accept=".csv">
+        <button class="btn btn-primary" id="upload-btn">Upload & Reconcile</button>
+        <button class="btn btn-secondary" id="reset-btn">Reset to sample data</button>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>Audit Trail</h3>
+      <button class="btn btn-primary" id="download-csv-btn">⬇ Download CSV</button>
+    </div>
+
+    <div class="sidebar-section">
+      <h3>AI Usage (this session)</h3>
+      <div class="usage-stat"><span>Calls made</span><span class="val mono" id="usage-calls">0</span></div>
+      <div class="usage-stat"><span>Failures</span><span class="val mono" id="usage-failures">0</span></div>
+      <div class="usage-stat"><span>Fallback events</span><span class="val mono" id="usage-fallbacks">0</span></div>
+      <div class="usage-stat" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+        <span>Models used</span>
+        <span class="val mono" id="usage-models" style="font-size: 10px;">—</span>
+      </div>
+      <div class="usage-stat" style="flex-direction: column; align-items: flex-start; gap: 4px;">
+        <span>Last AI analysis</span>
+        <span class="val mono" id="last-analyzed" style="font-size: 10px;">Not yet run</span>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <div class="topbar">
+      <button class="tab-btn active" data-section="dashboard">Dashboard</button>
+      <button class="tab-btn" data-section="reconciliation">Reconciliation</button>
+      <button class="tab-btn" data-section="insights">Insights &amp; Assistant</button>
+    </div>
+
+    <div id="error-banner-container"></div>
+
+    <div class="content">
+      <div id="skeleton-overlay">
+        <div class="metric-grid">
+          <div class="skeleton-metric-card"><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line tall"></div></div>
+          <div class="skeleton-metric-card"><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line tall"></div></div>
+          <div class="skeleton-metric-card"><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line tall"></div></div>
+          <div class="skeleton-metric-card"><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line tall"></div></div>
+        </div>
+        <div class="chart-grid">
+          <div class="chart-card"><div class="skeleton skeleton-chart"></div></div>
+          <div class="chart-card"><div class="skeleton skeleton-chart"></div></div>
+        </div>
+      </div>
+
+      <section class="section active loading-hidden" id="section-dashboard">
+        <div class="metric-grid">
+          <div class="metric-card">
+            <div class="metric-label">Total Orders</div>
+            <div class="metric-value mono" id="metric-total">—</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Matched</div>
+            <div class="metric-value mono" id="metric-matched">—</div>
+            <div class="metric-delta good" id="metric-match-rate"></div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Exceptions</div>
+            <div class="metric-value mono" id="metric-exceptions">—</div>
+            <div class="metric-delta warn" id="metric-exceptions-note">need review</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-label">Orphan Settlements</div>
+            <div class="metric-value mono" id="metric-orphans">—</div>
+            <div class="metric-delta warn">no matching order</div>
+          </div>
+        </div>
+
+        <div class="chart-grid">
+          <div class="chart-card">
+            <h3>Match Outcome</h3>
+            <div class="chart-wrap"><canvas id="chart-donut"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-header-row">
+              <h3>Exception Categories</h3>
+              <div class="chart-toggle">
+                <button class="toggle-btn active" data-mode="count">Count</button>
+                <button class="toggle-btn" data-mode="value">₹ Value</button>
+              </div>
+            </div>
+            <div class="chart-wrap"><canvas id="chart-bar"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="section-reconciliation">
+        <div class="subtab-bar">
+          <button class="subtab-btn active" data-subtab="matched">Matched Orders</button>
+          <button class="subtab-btn" data-subtab="exceptions">Exceptions</button>
+          <button class="subtab-btn" data-subtab="orphans">Orphan Settlements</button>
+        </div>
+
+        <div class="subtab-panel active" id="subtab-matched">
+          <input type="text" id="matched-search" class="table-search" placeholder="Search order ID, payment ID, or customer...">
+          <table class="data-table" id="table-matched">
+            <thead><tr>
+              <th data-sort="order_id">Order ID</th><th data-sort="order_amount">Order ₹</th><th data-sort="order_date">Order Date</th>
+              <th data-sort="payment_id">Payment ID</th><th data-sort="settled_amount">Settled ₹</th><th data-sort="settled_date">Settled Date</th><th>Note</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="subtab-panel" id="subtab-exceptions">
+          <div class="ai-batch-bar">
+            <span id="ai-eligible-note" class="text-muted"></span>
+            <button class="btn btn-primary btn-inline" id="run-ai-batch-btn">🔄 Run AI on ambiguous exceptions</button>
+          </div>
+
+          <div class="review-dashboard">
+            <div class="review-stat"><span class="review-stat-label">Reviewed</span><span class="review-stat-val mono" id="review-count-done">0</span></div>
+            <div class="review-stat"><span class="review-stat-label">Pending</span><span class="review-stat-val mono" id="review-count-pending">0</span></div>
+            <div class="review-filter">
+              <button class="filter-btn active" data-filter="all">All</button>
+              <button class="filter-btn" data-filter="pending">Pending only</button>
+              <button class="filter-btn" data-filter="reviewed">Reviewed only</button>
+            </div>
+            <select class="sort-select" id="exceptions-sort">
+              <option value="order_id">Sort: Order ID</option>
+              <option value="amount_desc">Sort: Amount (high to low)</option>
+              <option value="amount_asc">Sort: Amount (low to high)</option>
+              <option value="date">Sort: Order date</option>
+            </select>
+          </div>
+
+          <div id="exceptions-list"></div>
+        </div>
+
+        <div class="subtab-panel" id="subtab-orphans">
+          <table class="data-table" id="table-orphans">
+            <thead><tr>
+              <th data-sort="payment_id">Payment ID</th><th data-sort="amount">Amount</th><th data-sort="date">Date</th><th data-sort="utr_ref">Claimed Reference</th><th>Likely Reason</th>
+            </tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="section" id="section-insights">
+        <div class="insight-card">
+          <h3>📋 Story of This Run</h3>
+          <p id="story-summary" class="story-text">Loading…</p>
+        </div>
+
+        <div class="insight-card">
+          <h3>⚠️ Flagged for Attention (highest value)</h3>
+          <div id="flagged-shortlist"></div>
+        </div>
+
+        <div class="chat-card">
+          <h3>💬 Ask the Reconciliation Agent</h3>
+          <p class="text-muted" style="margin-bottom: 12px;">
+            Questions are answered from the actual data — totals use precomputed values, not AI arithmetic.
+          </p>
+          <div class="chat-suggestions">
+            <button class="suggestion-btn">Which orders have no settlement?</button>
+            <button class="suggestion-btn">What is the overall match rate?</button>
+            <button class="suggestion-btn">How much total value is stuck in exceptions?</button>
+          </div>
+          <div class="chat-history" id="chat-history"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chat-input" placeholder="Type your question here...">
+            <button class="btn btn-primary btn-inline" id="chat-send-btn">Ask</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+  const API = ''; // same-origin, FastAPI serves this file too
+
+  // HTML-escape any value before it's interpolated into innerHTML. Every
+  // field rendered below (customer_ref, reasons, AI rationale, chat
+  // messages, order IDs from uploaded CSVs) is untrusted user/AI-generated
+  // input. Without this, a malicious CSV value like a customer_ref
+  // containing "<img src=x onerror=alert(1)>" would execute as real HTML
+  // in the browser -- a genuine XSS vulnerability, caught and fixed here
+  // rather than left in place.
+  function esc(value) {
+    const div = document.createElement('div');
+    div.textContent = value === null || value === undefined ? '' : String(value);
+    return div.innerHTML;
+  }
+
+  // Reusable error banner -- replaces alert() (blocking, jarring) and silent
+  // console.error (invisible to the user) with a dismissible, non-blocking
+  // banner. autoHideMs=0 means the banner stays until manually dismissed;
+  // pass a number to auto-dismiss transient errors after that many ms.
+  function showError(message, autoHideMs = 0) {
+    const container = document.getElementById('error-banner-container');
+    const id = 'err-' + Date.now();
+    const banner = document.createElement('div');
+    banner.className = 'error-banner';
+    banner.id = id;
+    banner.innerHTML = `<span class="msg">⚠️ ${esc(message)}</span><button class="dismiss" aria-label="Dismiss">×</button>`;
+    banner.querySelector('.dismiss').addEventListener('click', () => banner.remove());
+    container.appendChild(banner);
+    if (autoHideMs > 0) {
+      setTimeout(() => document.getElementById(id)?.remove(), autoHideMs);
+    }
+  }
+
+  let currentData = null;   // last /api/reconcile response, shared across sections
+  let donutChart = null;
+  let barChart = null;
+  let barChartMode = 'count';  // 'count' or 'value' -- toggle state
+
+  // ── AI usage tracker ──
+  async function refreshUsage() {
+    try {
+      const res = await fetch(API + '/api/usage');
+      const data = await res.json();
+      document.getElementById('usage-calls').textContent = data.total_calls;
+      document.getElementById('usage-failures').textContent = data.failures;
+      document.getElementById('usage-fallbacks').textContent = data.fallback_events;
+      document.getElementById('usage-models').textContent =
+        data.models_used.length ? data.models_used.join(', ') : '—';
+    } catch (e) {
+      console.error('Failed to fetch usage:', e);
+    }
+  }
+
+  // ── Core data fetch, feeds every section ──
+  async function loadReconciliation({ skipAutoAi = false } = {}) {
+    try {
+      const res = await fetch(API + '/api/reconcile');
+      if (!res.ok) throw new Error('Reconciliation fetch failed: ' + res.status);
+      currentData = await res.json();
+      renderDashboard(currentData);
+      renderReconciliation(currentData);
+      renderInsights(currentData);
+
+      // Reveal real content and hide the skeleton now that a genuine
+      // render has happened -- done here (not on fetch success alone) so
+      // the skeleton stays visible through the full render, avoiding a
+      // flash of an empty section before renderDashboard etc. populate it.
+      document.getElementById('skeleton-overlay').classList.add('loaded');
+      document.getElementById('section-dashboard').classList.remove('loading-hidden');
+
+      // Auto-run AI analysis once per dataset (mirrors the Streamlit app's
+      // auto-run behavior). Gated by a simple fingerprint of the dataset
+      // (order + exception counts) so a page interaction that just re-fetches
+      // the same data doesn't re-trigger it -- and skipAutoAi prevents the
+      // recursive call from runAiBatchAnalysis()'s own loadReconciliation()
+      // from re-triggering itself.
+      const s = currentData.summary;
+      const datasetFingerprint = `${s.total_orders}:${s.exception_count}:${s.orphan_count}`;
+      const eligibleCount = currentData.results.filter(
+        r => r.status === 'exception' && r.reason.includes('outside expected tolerance')
+      ).length;
+
+      // Mark the "Last AI analysis" label stale if this dataset hasn't been
+      // analyzed yet under its current fingerprint -- makes it visually
+      // obvious when displayed AI results (if any survived from a prior
+      // dataset) no longer correspond to what's currently loaded.
+      const lastAnalyzedEl = document.getElementById('last-analyzed');
+      if (autoAiDoneForDataset !== datasetFingerprint && eligibleCount > 0) {
+        lastAnalyzedEl.textContent = 'Pending for this dataset';
+      }
+
+      if (!skipAutoAi && eligibleCount > 0 && autoAiDoneForDataset !== datasetFingerprint) {
+        autoAiDoneForDataset = datasetFingerprint;
+        await runAiBatchAnalysis(null);  // null btn -- this is a silent background run
+      }
+    } catch (e) {
+      console.error(e);
+      document.getElementById('skeleton-overlay').classList.add('loaded');
+      document.getElementById('section-dashboard').classList.remove('loading-hidden');
+      document.getElementById('section-dashboard').innerHTML =
+        '<div class="placeholder">Could not load data: ' + e.message + '</div>';
+    }
+  }
+
+  function renderDashboard(data) {
+    const s = data.summary;
+
+    document.getElementById('metric-total').textContent = s.total_orders;
+    document.getElementById('metric-matched').textContent = s.matched_count;
+    document.getElementById('metric-match-rate').textContent = s.match_rate_pct + '% match rate';
+    document.getElementById('metric-exceptions').textContent = s.exception_count;
+    document.getElementById('metric-orphans').textContent = s.orphan_count;
+
+    // Donut: match outcome by count
+    const donutCtx = document.getElementById('chart-donut').getContext('2d');
+    if (donutChart) donutChart.destroy();
+    donutChart = new Chart(donutCtx, {
+      type: 'doughnut',
+      data: {
+        labels: ['Matched', 'Exceptions', 'Orphan Settlements'],
+        datasets: [{
+          data: [s.matched_count, s.exception_count, s.orphan_count],
+          backgroundColor: ['#0F9D6C', '#D97706', '#94A3B8'],
+          borderWidth: 0,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'IBM Plex Sans', size: 12 } } },
+        },
+      },
+    });
+
+    renderCategoryChart(data);
+  }
+
+  function renderCategoryChart(data) {
+    const s = data.summary;
+    const exceptions = data.results.filter(r => r.status === 'exception');
+
+    const categories = [
+      { label: 'Missing settlement', count: s.missing_count, matchType: 'EXCEPTION_MISSING_SETTLEMENT' },
+      { label: 'Duplicate entry', count: s.duplicate_count, matchType: 'EXCEPTION_DUPLICATE_SETTLEMENT' },
+      { label: 'Ambiguous mismatch', count: s.ambiguous_count, matchType: 'EXCEPTION_UNRESOLVED_MISMATCH' },
+      { label: 'Partial payment', count: s.partial_count, matchType: 'EXCEPTION_PARTIAL_PAYMENT' },
+      { label: 'Fuzzy reference', count: s.fuzzy_reference_count, matchType: 'EXCEPTION_FUZZY_REFERENCE_MATCH' },
+      { label: 'Batch settlement', count: s.batch_settlement_count, matchType: 'EXCEPTION_BATCH_SETTLEMENT_MATCH' },
+    ].filter(c => c.count > 0);  // hide categories with zero occurrences, keeps chart clean
+
+    const values = categories.map(c =>
+      barChartMode === 'count'
+        ? c.count
+        : exceptions.filter(r => r.match_type === c.matchType).reduce((sum, r) => sum + r.order_amount, 0)
+    );
+
+    const barCtx = document.getElementById('chart-bar').getContext('2d');
+    if (barChart) barChart.destroy();
+    barChart = new Chart(barCtx, {
+      type: 'bar',
+      data: {
+        labels: categories.map(c => c.label),
+        datasets: [{
+          data: values,
+          backgroundColor: barChartMode === 'count' ? '#0D94FB' : '#D97706',
+          borderRadius: 4,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: {
+            beginAtZero: true,
+            ticks: {
+              precision: barChartMode === 'count' ? 0 : undefined,
+              font: { family: 'IBM Plex Mono', size: 11 },
+              callback: v => barChartMode === 'value' ? '₹' + v.toLocaleString('en-IN') : v,
+            },
+          },
+          x: { ticks: { font: { family: 'IBM Plex Sans', size: 11 } } },
+        },
+      },
+    });
+  }
+
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      barChartMode = btn.dataset.mode;
+      if (currentData) renderCategoryChart(currentData);
+    });
+  });
+
+  // ── Tab switching ──
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('section-' + btn.dataset.section).classList.add('active');
+    });
+  });
+
+  // ── Sub-tab switching (Reconciliation section) ──
+  document.querySelectorAll('.subtab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.subtab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.subtab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById('subtab-' + btn.dataset.subtab).classList.add('active');
+    });
+  });
+
+  const AI_MARKER = 'outside expected tolerance';
+  let exceptionFilter = 'all';
+
+  // Sort state per table: { column, direction } -- direction is 'asc' or 'desc'
+  const tableSortState = {
+    matched: { column: null, direction: 'asc' },
+    orphans: { column: null, direction: 'asc' },
+  };
+
+  function sortRows(rows, column, direction) {
+    if (!column) return rows;
+    const sorted = [...rows].sort((a, b) => {
+      let av = a[column], bv = b[column];
+      // Numeric columns compare as numbers; everything else as strings
+      if (typeof av === 'number' && typeof bv === 'number') {
+        return av - bv;
+      }
+      av = String(av ?? '').toLowerCase();
+      bv = String(bv ?? '').toLowerCase();
+      return av < bv ? -1 : av > bv ? 1 : 0;
+    });
+    return direction === 'desc' ? sorted.reverse() : sorted;
+  }
+
+  function renderReconciliation(data) {
+    const results = data.results;
+    const matched = results.filter(r => r.status === 'matched');
+    const exceptions = results.filter(r => r.status === 'exception');
+
+    // Matched table
+    const searchTerm = (document.getElementById('matched-search')?.value || '').toLowerCase().trim();
+    const filteredMatched = searchTerm
+      ? matched.filter(r =>
+          String(r.order_id).toLowerCase().includes(searchTerm) ||
+          String(r.payment_id).toLowerCase().includes(searchTerm) ||
+          String(r.customer_ref || '').toLowerCase().includes(searchTerm))
+      : matched;
+    const matchedSort = tableSortState.matched;
+    const sortedMatched = sortRows(filteredMatched, matchedSort.column, matchedSort.direction);
+    const matchedBody = document.querySelector('#table-matched tbody');
+    matchedBody.innerHTML = sortedMatched.map(r => `
+      <tr>
+        <td class="mono-cell">${esc(r.order_id)}</td>
+        <td class="mono-cell">₹${r.order_amount.toFixed(0)}</td>
+        <td class="mono-cell">${esc(r.order_date)}</td>
+        <td class="mono-cell">${esc(r.payment_id)}</td>
+        <td class="mono-cell">₹${r.settled_amount.toFixed(0)}</td>
+        <td class="mono-cell">${esc(r.settled_date)}</td>
+        <td>${esc(r.reason)}</td>
+      </tr>
+    `).join('');
+
+    // Orphans table
+    const orphansSort = tableSortState.orphans;
+    const sortedOrphans = sortRows(data.orphans, orphansSort.column, orphansSort.direction);
+    const orphansBody = document.querySelector('#table-orphans tbody');
+    orphansBody.innerHTML = sortedOrphans.map(o => `
+      <tr>
+        <td class="mono-cell">${esc(o.payment_id)}</td>
+        <td class="mono-cell">₹${o.amount.toFixed(0)}</td>
+        <td class="mono-cell">${esc(o.date)}</td>
+        <td class="mono-cell">${esc(o.utr_ref)}</td>
+        <td>${esc(o.reason)}</td>
+      </tr>
+    `).join('');
+
+    renderExceptions(exceptions);
+  }
+
+  // Click-to-sort on table headers (Matched Orders + Orphan Settlements)
+  document.querySelectorAll('#table-matched th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => handleHeaderSort(th, 'matched'));
+  });
+  document.querySelectorAll('#table-orphans th[data-sort]').forEach(th => {
+    th.addEventListener('click', () => handleHeaderSort(th, 'orphans'));
+  });
+
+  function handleHeaderSort(th, tableKey) {
+    const column = th.dataset.sort;
+    const state = tableSortState[tableKey];
+    if (state.column === column) {
+      state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+    } else {
+      state.column = column;
+      state.direction = 'asc';
+    }
+    // Update header visual state
+    const table = th.closest('table');
+    table.querySelectorAll('th[data-sort]').forEach(h => {
+      h.classList.remove('sort-active', 'sort-asc', 'sort-desc');
+    });
+    th.classList.add('sort-active', state.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+
+    if (currentData) renderReconciliation(currentData);
+  }
+
+  function renderExceptions(exceptions) {
+    const eligible = exceptions.filter(r => r.reason.includes(AI_MARKER));
+    document.getElementById('ai-eligible-note').textContent =
+      eligible.length + ' exception(s) are ambiguous enough to benefit from AI analysis.';
+
+    const reviewedCount = exceptions.filter(r => r.reviewed).length;
+    document.getElementById('review-count-done').textContent = reviewedCount;
+    document.getElementById('review-count-pending').textContent = exceptions.length - reviewedCount;
+
+    let visible = exceptions;
+    if (exceptionFilter === 'pending') visible = exceptions.filter(r => !r.reviewed);
+    if (exceptionFilter === 'reviewed') visible = exceptions.filter(r => r.reviewed);
+
+    const sortMode = document.getElementById('exceptions-sort')?.value || 'order_id';
+    visible = [...visible].sort((a, b) => {
+      if (sortMode === 'amount_desc') return b.order_amount - a.order_amount;
+      if (sortMode === 'amount_asc') return a.order_amount - b.order_amount;
+      if (sortMode === 'date') return String(a.order_date).localeCompare(String(b.order_date));
+      return String(a.order_id).localeCompare(String(b.order_id));  // default: order_id
+    });
+
+    const list = document.getElementById('exceptions-list');
+    if (visible.length === 0) {
+      list.innerHTML = '<div class="placeholder">No exceptions match this filter.</div>';
+      return;
+    }
+
+    list.innerHTML = visible.map(r => {
+      const statusClass = r.reviewed ? 'reviewed' : 'pending';
+      const statusText = r.reviewed ? '✅ Reviewed' : '🔲 Pending';
+      const hasAI = r.ai_category && r.ai_category !== '';
+      const safeOrderId = esc(r.order_id);  // used inside an onclick string below -- see note there
+
+      let aiBlock = '';
+      if (hasAI) {
+        const confPct = r.confidence !== null && r.confidence !== undefined
+          ? Math.round(r.confidence * 100) : null;
+        aiBlock = `
+          <div class="ai-analysis-box">
+            <span class="ai-category-tag">${esc(r.ai_category)}</span>
+            ${confPct !== null ? `
+              <div class="confidence-wrap">
+                <div class="confidence-track"><div class="confidence-fill" style="width:${confPct}%"></div></div>
+                <span class="confidence-label">${confPct}%</span>
+              </div>` : ''}
+            <div class="ai-rationale">${esc(r.ai_rationale)}</div>
+            ${r.model_used ? `<div class="ai-model-note">via <code>${esc(r.model_used)}</code></div>` : ''}
+          </div>`;
+      }
+
+      return `
+        <div class="exception-card" data-order-id="${esc(r.order_id)}">
+          <div class="exception-header" onclick="this.parentElement.classList.toggle('expanded')">
+            <span class="status-badge ${statusClass}">${statusText}</span>
+            <span class="exception-order-id">${esc(r.order_id)}</span>
+            <span class="exception-amount">₹${r.order_amount.toFixed(0)}</span>
+            <span class="exception-action-tag">${esc(r.recommended_action)}</span>
+          </div>
+          <div class="exception-body">
+            <div class="exception-detail-grid">
+              <div><span class="label">Order date:</span> <span class="val">${esc(r.order_date)}</span></div>
+              <div><span class="label">Customer:</span> <span class="val">${esc(r.customer_ref)}</span></div>
+              ${r.payment_id ? `
+                <div><span class="label">Payment ID:</span> <span class="val">${esc(r.payment_id)}</span> <button class="copy-btn" data-copy-value="${esc(r.payment_id)}" title="Copy">📋</button></div>
+                <div><span class="label">Settled:</span> <span class="val">₹${r.settled_amount?.toFixed(0) ?? '—'} on ${esc(r.settled_date)}</span></div>
+              ` : `<div><span class="label">Settlement:</span> <span class="val">None found</span></div>`}
+              <div><span class="label">Order ID:</span> <span class="val">${esc(r.order_id)}</span> <button class="copy-btn" data-copy-value="${esc(r.order_id)}" title="Copy">📋</button></div>
+            </div>
+            <div class="rule-note">${esc(r.reason)}</div>
+            ${aiBlock}
+            <div class="review-checkbox-row">
+              <input type="checkbox" ${r.reviewed ? 'checked' : ''}
+                data-order-id-for-review="${esc(r.order_id)}">
+              <span>Mark as reviewed (local tracking only)</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+
+    // Wire review checkboxes via addEventListener + data attribute instead of
+    // an inline onclick="toggleReview('${order_id}', ...)" string -- an
+    // order_id containing a single-quote could otherwise break out of that
+    // inline JS string and inject arbitrary script. This is safer even with
+    // esc() already applied, since esc() escapes for HTML context, not
+    // specifically for "safely embedded inside an inline JS string literal."
+    document.querySelectorAll('[data-order-id-for-review]').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        toggleReview(e.target.dataset.orderIdForReview, e.target.checked);
+      });
+    });
+  }
+
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      exceptionFilter = btn.dataset.filter;
+      if (currentData) renderExceptions(currentData.results.filter(r => r.status === 'exception'));
+    });
+  });
+
+  // Delegated handler for copy buttons -- attached once on document, works
+  // for all dynamically-rendered exception cards without needing to
+  // re-attach listeners on every re-render.
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.copy-btn');
+    if (!btn) return;
+    const value = btn.dataset.copyValue;
+    navigator.clipboard.writeText(value).then(() => {
+      btn.textContent = '✓';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = '📋'; btn.classList.remove('copied'); }, 1200);
+    }).catch(() => showError('Could not copy to clipboard.', 3000));
+  });
+
+  // Esc closes any expanded exception card(s) -- Enter-to-send already
+  // works in chat (existing keypress handler on #chat-input).
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.exception-card.expanded').forEach(card => {
+        card.classList.remove('expanded');
+      });
+    }
+  });
+
+  document.getElementById('matched-search').addEventListener('input', () => {
+    if (currentData) renderReconciliation(currentData);
+  });
+
+  document.getElementById('exceptions-sort').addEventListener('change', () => {
+    if (currentData) renderExceptions(currentData.results.filter(r => r.status === 'exception'));
+  });
+
+  async function toggleReview(orderId, reviewed) {
+    try {
+      await fetch(API + '/api/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId, reviewed }),
+      });
+      await loadReconciliation();  // refresh to update counts
+    } catch (e) {
+      console.error('Failed to update review status:', e);
+    }
+  }
+
+  let autoAiDoneForDataset = null;  // tracks which dataset we've already auto-analyzed
+
+  async function runAiBatchAnalysis(btn) {
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Running AI analysis...';
+    }
+    try {
+      const res = await fetch(API + '/api/analyze_batch', { method: 'POST' });
+      const result = await res.json();
+      await loadReconciliation({ skipAutoAi: true });
+      await refreshUsage();
+      const now = new Date();
+      document.getElementById('last-analyzed').textContent =
+        now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      if (btn) {
+        btn.textContent = `✅ Analyzed ${result.analyzed_count} exception(s)`;
+        setTimeout(() => {
+          btn.textContent = '🔄 Re-run AI on ambiguous exceptions';
+          btn.disabled = false;
+        }, 2000);
+      }
+      return result;
+    } catch (e) {
+      if (btn) {
+        btn.textContent = '⚠️ Failed — try again';
+        btn.disabled = false;
+      }
+      console.error(e);
+      showError('AI batch analysis failed: ' + e.message, 6000);
+      return null;
+    }
+  }
+
+  document.getElementById('run-ai-batch-btn').addEventListener('click', (e) => {
+    runAiBatchAnalysis(e.target);
+  });
+
+  // ── Insights section ──
+
+  function renderInsights(data) {
+    const s = data.summary;
+    const exceptions = data.results.filter(r => r.status === 'exception');
+
+    // Story summary — computed client-side from data already fetched, no new AI call
+    const topCategory = [
+      { name: 'missing settlements', count: s.missing_count },
+      { name: 'duplicate entries', count: s.duplicate_count },
+      { name: 'ambiguous mismatches', count: s.ambiguous_count },
+      { name: 'partial payments', count: s.partial_count },
+      { name: 'fuzzy reference matches needing confirmation', count: s.fuzzy_reference_count },
+      { name: 'batch settlement matches needing confirmation', count: s.batch_settlement_count },
+    ].sort((a, b) => b.count - a.count)[0];
+
+    const story = `${s.match_rate_pct}% of orders (${s.matched_count} of ${s.total_orders}) ` +
+      `reconciled automatically, worth ₹${s.matched_value_total.toLocaleString('en-IN')}. ` +
+      `${s.exception_count} exceptions remain, worth ₹${s.exception_value_total.toLocaleString('en-IN')} — ` +
+      `the largest category is <strong>${topCategory.name}</strong> (${topCategory.count} orders). ` +
+      `${s.orphan_count} orphan settlement(s) reference orders that don't exist in the records, ` +
+      `worth ₹${s.orphan_value_total.toLocaleString('en-IN')}.`;
+    document.getElementById('story-summary').innerHTML = story;
+
+
+    // Flagged shortlist: top 5 highest-value unresolved exceptions
+    const top5 = [...exceptions].sort((a, b) => b.order_amount - a.order_amount).slice(0, 5);
+    document.getElementById('flagged-shortlist').innerHTML = top5.map(r => `
+      <div class="shortlist-item">
+        <div>
+          <div class="shortlist-order">${esc(r.order_id)}</div>
+          <div class="shortlist-reason">${esc(r.recommended_action)}</div>
+        </div>
+        <div class="shortlist-amount">₹${r.order_amount.toFixed(0)}</div>
+      </div>
+    `).join('') || '<div class="text-muted">No exceptions to flag.</div>';
+  }
+
+  // ── Chat ──
+  async function sendChatMessage(question) {
+    if (!question.trim()) return;
+    const history = document.getElementById('chat-history');
+    history.innerHTML += `<div class="chat-msg user">${esc(question)}</div>`;
+    history.scrollTop = history.scrollHeight;
+    document.getElementById('chat-input').value = '';
+
+    const thinkingId = 'thinking-' + Date.now();
+    history.innerHTML += `<div class="chat-msg assistant" id="${thinkingId}">Thinking…</div>`;
+    history.scrollTop = history.scrollHeight;
+
+    try {
+      const res = await fetch(API + '/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      document.getElementById(thinkingId).textContent = data.answer;
+      await refreshUsage();
+    } catch (e) {
+      document.getElementById(thinkingId).textContent = 'Sorry, something went wrong: ' + e.message;
+    }
+    history.scrollTop = history.scrollHeight;
+  }
+
+  document.getElementById('chat-send-btn').addEventListener('click', () => {
+    sendChatMessage(document.getElementById('chat-input').value);
+  });
+
+  document.getElementById('chat-input').addEventListener('keypress', (e) => {
+    if (e.key === 'Enter') sendChatMessage(e.target.value);
+  });
+
+  document.querySelectorAll('.suggestion-btn').forEach(btn => {
+    btn.addEventListener('click', () => sendChatMessage(btn.textContent));
+  });
+
+  // ── Sidebar: upload, reset, download (previously unwired — real bug, now fixed) ──
+  document.getElementById('upload-btn').addEventListener('click', async () => {
+    const ordersFile = document.getElementById('orders-file').files[0];
+    const settlementsFile = document.getElementById('settlements-file').files[0];
+    const btn = document.getElementById('upload-btn');
+    const pill = document.getElementById('data-status-pill');
+
+    if (!ordersFile || !settlementsFile) {
+      showError('Please choose both an Orders CSV and a Settlements CSV before uploading.', 5000);
+      return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Uploading...';
+
+    const formData = new FormData();
+    formData.append('orders_csv', ordersFile);
+    formData.append('settlements_csv', settlementsFile);
+
+    try {
+      const res = await fetch(API + '/api/upload', { method: 'POST', body: formData });
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.detail || 'Upload failed');
+
+      pill.textContent = 'Using uploaded files';
+      pill.className = 'status-pill custom';
+      await loadReconciliation();
+      await refreshUsage();
+      btn.textContent = '✅ Uploaded';
+    } catch (e) {
+      showError('Upload failed: ' + e.message);
+      btn.textContent = 'Upload & Reconcile';
+    } finally {
+      btn.disabled = false;
+      setTimeout(() => { btn.textContent = 'Upload & Reconcile'; }, 2000);
+    }
+  });
+
+  document.getElementById('reset-btn').addEventListener('click', async () => {
+    const pill = document.getElementById('data-status-pill');
+    try {
+      await fetch(API + '/api/reset', { method: 'POST' });
+      pill.textContent = 'Using sample data';
+      pill.className = 'status-pill sample';
+      document.getElementById('orders-file').value = '';
+      document.getElementById('settlements-file').value = '';
+      await loadReconciliation();
+      await refreshUsage();
+    } catch (e) {
+      showError('Reset failed: ' + e.message);
+    }
+  });
+
+  document.getElementById('download-csv-btn').addEventListener('click', () => {
+    // Direct navigation triggers the browser's native file download for the
+    // StreamingResponse this endpoint returns -- no fetch/blob juggling needed.
+    window.location.href = API + '/api/audit_csv';
+  });
+
+  refreshUsage();
+  loadReconciliation();
+</script>
+</body>
+</html>

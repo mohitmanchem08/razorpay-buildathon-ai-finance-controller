@@ -1,0 +1,10 @@
+google-genai
+python-dotenv
+pandas
+tenacity
+pydantic
+pytest
+fastapi
+uvicorn
+python-multipart
+python-Levenshtein
